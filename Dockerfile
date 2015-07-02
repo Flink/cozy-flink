@@ -118,8 +118,10 @@ RUN chmod 0644 /etc/supervisor/conf.d/*
 RUN apt-get clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+COPY start /start
+
 EXPOSE 9104
 
 VOLUME ["/var/lib/couchdb", "/etc/cozy", "/usr/local/cozy"]
 
-CMD [ "/usr/local/bin/supervisord", "-n", "-c", "/etc/supervisord.conf" ]
+CMD /start
