@@ -122,6 +122,6 @@ COPY start /start
 
 EXPOSE 9104
 
-VOLUME ["/var/lib/couchdb", "/etc/cozy", "/usr/local/cozy"]
+VOLUME ["/var/lib/couchdb", "/etc", "/usr/local/cozy"]
 
 CMD /start
