@@ -1,4 +1,39 @@
 #!/bin/bash
+set -eo pipefail
 
 unset PORT # We don't want a global PORT variable
+
+if [[ ! -f /etc/cozy/couchdb.login ]]; then
+  [[ -z "$COUCH_USER" || -z "$COUCH_PASS" ]] && echo "COUCH_USER or COUCH_PASS env var not present!" && exit 1
+  mkdir /etc/cozy
+  chown -hR cozy /etc/cozy
+  echo "$COUCH_USER" > /etc/cozy/couchdb.login
+  echo "$COUCH_PASS" >> /etc/cozy/couchdb.login
+  chown cozy-data-system /etc/cozy/couchdb.login
+  chmod 640 /etc/cozy/couchdb.login
+fi
+
+if [[ ! -f /etc/cozy/controller.token ]]; then
+  pwgen -1 > /etc/cozy/controller.token
+  chown cozy-home /etc/cozy/controller.token
+  chmod 700 /etc/cozy/controller.token
+fi
+
+if [[ ! -d /usr/local/cozy/apps/data-system ]]; then
+ cozy-controller &
+ cozy_controller=$!
+ sleep 5
+ while ! curl -s 127.0.0.1:9002; do sleep 5; done
+ cd /usr/local/cozy-indexer/cozy-data-indexer
+ . ./virtualenv/bin/activate
+ /usr/local/cozy-indexer/cozy-data-indexer/virtualenv/bin/python server.py &
+ cozy_data_indexer=$!
+ sleep 5
+ while ! curl -s 127.0.0.1:9102; do sleep 5; done
+ cozy-monitor install data-system
+ cozy-monitor install home
+ cozy-monitor install proxy
+ kill $cozy_controller $cozy_data_indexer
+fi
+
 /usr/local/bin/supervisord -n -c /etc/supervisord.conf

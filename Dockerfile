@@ -3,12 +3,9 @@ FROM ubuntu:14.04
 ENV DEBIAN_FRONTEND noninteractive
 
 # Install Cozy tools and dependencies.
-RUN echo "deb http://ppa.launchpad.net/nginx/stable/ubuntu trusty main" >> /etc/apt/sources.list \
- && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys C300EE8C \
- && apt-get update --quiet \
+RUN apt-get update --quiet \
  && apt-get install --quiet --yes \
   build-essential \
-  couchdb \
   curl \
   git \
   imagemagick \
@@ -31,16 +28,8 @@ RUN pip install \
   supervisor \
   virtualenv
 
-# Install NodeJS and NPM by building from source.
-RUN cd /tmp \
- && wget -q -O - http://nodejs.org/dist/v0.10.26/node-v0.10.26.tar.gz | tar xz \
- && cd node-v0.10.26 \
- && ./configure \
- && CXX="g++ -Wno-unused-local-typedefs" make \
- && CXX="g++ -Wno-unused-local-typedefs" make install \
- && cd .. \
- && rm -rf /tmp/node-v* \
- && npm install -g npm
+RUN curl -sL https://deb.nodesource.com/setup_0.10 | bash \
+  && apt-get install --quiet --yes nodejs
 
 # Install CoffeeScript, Cozy Monitor and Cozy Controller via NPM.
 RUN npm install -g \
@@ -52,20 +41,6 @@ RUN npm install -g \
 RUN useradd -M cozy \
  && useradd -M cozy-data-system \
  && useradd -M cozy-home
-
-# Configure CouchDB.
-RUN mkdir /etc/cozy \
- && chown -hR cozy /etc/cozy
-RUN pwgen -1 > /etc/cozy/couchdb.login \
- && pwgen -1 >> /etc/cozy/couchdb.login \
- && chown cozy-data-system /etc/cozy/couchdb.login \
- && chmod 640 /etc/cozy/couchdb.login
-RUN mkdir /var/run/couchdb \
- && chown -hR couchdb /var/run/couchdb \
- && su - couchdb -c 'couchdb -b' \
- && sleep 5 \
- && while ! curl -s 127.0.0.1:5984; do sleep 5; done \
- && curl -s -X PUT 127.0.0.1:5984/_config/admins/$(head -n1 /etc/cozy/couchdb.login) -d "\"$(tail -n1 /etc/cozy/couchdb.login)\""
 
 # Configure Supervisor.
 ADD supervisor/supervisord.conf /etc/supervisord.conf
@@ -85,18 +60,6 @@ RUN mkdir -p /usr/local/cozy-indexer \
 
 # Start up background services and install the Cozy platform apps.
 ENV NODE_ENV production
-RUN su - couchdb -c 'couchdb -b' \
- && sleep 5 \
- && while ! curl -s 127.0.0.1:5984; do sleep 5; done \
- && /usr/local/lib/node_modules/cozy-controller/bin/cozy-controller & sleep 5 \
- && while ! curl -s 127.0.0.1:9002; do sleep 5; done \
- && cd /usr/local/cozy-indexer/cozy-data-indexer \
- && . ./virtualenv/bin/activate \
- && /usr/local/cozy-indexer/cozy-data-indexer/virtualenv/bin/python server.py & sleep 5 \
- && while ! curl -s 127.0.0.1:9102; do sleep 5; done \
- && cozy-monitor install data-system \
- && cozy-monitor install home \
- && cozy-monitor install proxy
 
 # Configure Postfix with default parameters.
 # TODO: Change mydomain.net?
@@ -108,10 +71,7 @@ RUN echo "postfix postfix/mailname string mydomain.net" | debconf-set-selections
 # Import Supervisor configuration files.
 ADD supervisor/cozy-controller.conf /etc/supervisor/conf.d/cozy-controller.conf
 ADD supervisor/cozy-indexer.conf /etc/supervisor/conf.d/cozy-indexer.conf
-ADD supervisor/cozy-init.conf /etc/supervisor/conf.d/cozy-init.conf
-ADD supervisor/couchdb.conf /etc/supervisor/conf.d/couchdb.conf
 ADD supervisor/postfix.conf /etc/supervisor/conf.d/postfix.conf
-ADD cozy-init /etc/init.d/cozy-init
 RUN chmod 0644 /etc/supervisor/conf.d/*
 
 # Clean APT cache for a lighter image.
@@ -122,6 +82,6 @@ COPY start /start
 
 EXPOSE 9104
 
-VOLUME ["/var/lib/couchdb", "/etc", "/usr/local/cozy"]
+VOLUME ["/etc", "/usr/local/cozy"]
 
 CMD /start
